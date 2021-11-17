@@ -1,0 +1,55 @@
+name: Upload web app
+
+on:
+  push:
+    branches: [ master, release ]
+
+jobs:
+  Deploy:
+    runs-on: ubuntu-latest
+    env:
+      AWS_ACCESS_KEY_ID: ''
+      AWS_SECRET_ACCESS_KEY: ''
+      ENVIRONMENT: ''
+
+    steps:
+      - name: Check if it's master branch
+        if: ${{github.ref_name == 'master'}}
+        run: |
+          echo "AWS_ACCESS_KEY_ID=${{ secrets.DEV_AWS_ACCESS_KEY_ID }}" >> $GITHUB_ENV
+          echo "AWS_SECRET_ACCESS_KEY=${{ secrets.DEV_AWS_SECRET_ACCESS_KEY }}" >> $GITHUB_ENV
+          echo "ENVIRONMENT=devel" >> $GITHUB_ENV
+          
+      - name: Check if it's release branch
+        if: ${{github.ref_name == 'release'}}
+        run: |
+          echo "AWS_ACCESS_KEY_ID=${{ secrets.STAGE_AWS_ACCESS_KEY_ID }}" >> $GITHUB_ENV
+          echo "AWS_SECRET_ACCESS_KEY=${{ secrets.STAGE_AWS_SECRET_ACCESS_KEY }}" >> $GITHUB_ENV
+          echo "ENVIRONMENT=stage" >> $GITHUB_ENV
+
+      - name: Checkout
+        uses: actions/checkout@v2
+
+      - name: Setup node
+        uses: actions/setup-node@v2
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Build static file
+        run: npm run build
+       
+      - name: Zip build folder
+        run: |
+          cd build
+          zip -r webapp.zip ./*
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-east-1
+
+      - name: Deploy static site to S3 bucket
+        run: aws s3 cp build/webapp.zip s3://artifacts.original.works/$ENVIRONMENT/webapp/current/webapp.zip
